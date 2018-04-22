@@ -374,6 +374,8 @@ void SERCOM::resetWIRE()
 
 void SERCOM::enableWIRE()
 {
+  // Set inactive time-out (prevent bus hang in multi-master set-up)
+  sercom->I2CM.CTRLA.bit.INACTOUT = 3 ;
   // I2C Master and Slave modes share the ENABLE bit function.
 
   // Enable the I2C master mode
@@ -494,7 +496,13 @@ bool SERCOM::startTransmissionWIRE(uint8_t address, SercomWireReadWriteFlag flag
   address = (address << 0x1ul) | flag;
 
   // Wait idle or owner bus mode
-  while ( !isBusIdleWIRE() && !isBusOwnerWIRE() );
+  while ( !isBusIdleWIRE() && !isBusOwnerWIRE() )
+  {
+    // Check the bus error bit and the arbitration loss bit, restart if set.
+    if (sercom->I2CM.STATUS.bit.ARBLOST) {
+      return false;
+    }
+  }
 
   // Send start and address
   sercom->I2CM.ADDR.bit.ADDR = address;
@@ -506,6 +514,12 @@ bool SERCOM::startTransmissionWIRE(uint8_t address, SercomWireReadWriteFlag flag
     {
       // Wait transmission complete
     }
+    // Check for loss of arbitration (multiple masters starting communication at the same time)
+    if(!isBusOwnerWIRE())
+    {
+      // Restart communication
+      startTransmissionWIRE(address >> 1, flag);
+    } 
   }
   else  // Read mode
   {
@@ -544,9 +558,9 @@ bool SERCOM::sendDataMasterWIRE(uint8_t data)
   //Wait transmission successful
   while(!sercom->I2CM.INTFLAG.bit.MB) {
 
-    // If a bus error occurs, the MB bit may never be set.
-    // Check the bus error bit and bail if it's set.
-    if (sercom->I2CM.STATUS.bit.BUSERR) {
+    // If a bus error or loss of arbitration occurs, the MB bit may never be set.
+    // Check the bus error bit and the arbitration loss bit, bail if set.
+    if (sercom->I2CM.STATUS.bit.BUSERR || sercom->I2CM.STATUS.bit.ARBLOST) {
       return false;
     }
   }
