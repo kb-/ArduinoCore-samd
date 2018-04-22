@@ -376,6 +376,9 @@ void SERCOM::enableWIRE()
 {
   // Set inactive time-out (prevent bus hang in multi-master set-up)
   sercom->I2CM.CTRLA.bit.INACTOUT = 3 ;
+  sercom->I2CM.CTRLA.bit.LOWTOUTEN = 1 ;
+  sercom->I2CM.CTRLA.bit.SEXTTOEN = 1 ;
+  sercom->I2CM.CTRLA.bit.MEXTTOEN = 1 ;
   // I2C Master and Slave modes share the ENABLE bit function.
 
   // Enable the I2C master mode
@@ -496,13 +499,7 @@ bool SERCOM::startTransmissionWIRE(uint8_t address, SercomWireReadWriteFlag flag
   address = (address << 0x1ul) | flag;
 
   // Wait idle or owner bus mode
-  while ( !isBusIdleWIRE() && !isBusOwnerWIRE() )
-  {
-    // Check the bus error bit and the arbitration loss bit, restart if set.
-    if (sercom->I2CM.STATUS.bit.ARBLOST) {
-      return false;
-    }
-  }
+  // while ( !isBusIdleWIRE() && !isBusOwnerWIRE() );//causes hang on loss of arbitration; not necessary, handled by the chip (p459 "Transmitting Address Packets" in SMAD21 datasheet)
 
   // Send start and address
   sercom->I2CM.ADDR.bit.ADDR = address;
